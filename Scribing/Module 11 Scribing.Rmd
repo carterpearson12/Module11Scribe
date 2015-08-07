@@ -1,0 +1,170 @@
+---
+title: "Module 11"
+author: "Carter Pearon, Brian Lakey and Stephen Allen"
+date: "August 6, 2015"
+output: html_document
+---
+
+## Principle Component Analysis
+
+### Conceptualizing the First Principle Component
+* The goal of Principle Component Analysis is to reduce the dimensionality of the data matrix by projecting each data point onto a single vector
+
+* A given dataset can be represented by an N x D matrix, with n observations and d dimensions, then each row of that matrix,  $x{_{i}}^{T}$, is a vector representing a single observation:
+
+    $X=\begin{pmatrix}x_{1\:1}&x_{1\:2}&..&x_{1\:D}\\x_{2\:1}&\ddots&&\vdots\\\vdots& &\ddots&\vdots\\x_{n\:1}&\cdots&\cdots&x_{n\:D}\end{pmatrix}$  
+
+    where the first row of X corresponds to x column vector ($x{_{1}}^{T}$) transposed  
+
+* To reduce the dimensionality of our data set we seek to project each observation, $x{_{i}}^{T}$, on some unit vector V (a unit vector is a vector with length = 1, i.e. $\left\|V\right\|_{2}^{2}=1$)
+
+* Dominant axis analysis is a synonym of PCA
+
+* We use the transpose of the $x{_{i}}$'s, $x{_{i}}^{T}$, because the statistical convention is to express a single dimension matrix as a column vector and we will ultimately need to take the inner product of observation $x{_{i}}^{T}$ and vector V
+
+* We use vector V as a "rotation", which defines a one-dimensional subspace on which me can map the x-values
+
+    ![](/Users/carterpearson12/Desktop/PM - Scott/Scribing/Projection.png)
+
+* Our projection of each $x{_{i}}^{T}$ onto V gives us a corresponding $\alpha{_{i}}$, a scalar multiple that tells us where $x{_{i}}^{T}$ falls on V
+
+* The projected location in D-dimensional Euclidean space $\mathbb{R}^{^{D}}$ is:  
+
+    $\widehat{x_{i}}=\alpha_{i}\,V$  
+
+    with $\widehat{x_{i}}$: vector of length D  , $\alpha_{i}$: scalar  , V: vector of length D 
+
+### Optimizing the Variance
+
+* The objective when picking V is to find the vector that accounts for the greatest variance in the data 
+
+* By accounting for a high variance, the alphas of observed points x carry the greatest meaning.  Were a vector to be selected that accounted for a small variance, than the alphas associated with each x would be very tightly grouped on V and thus generally uninformative.
+
+* The following example using R is useful for demonstrating the concept of selecting a vector that accounts for the highest variance.  Let us consider the iris data set.  Our ultimate goal is to project each data point x onto a single vector V.  This v is the dominant axis of the data matrix X, and is the single vector that accounts for the most variance.
+
+Let's look to find the vector of greatest variance for two features, sepal length and pedal width.
+```{r}
+data(iris)
+Z = iris[,c(1,4)]
+head(Z)
+```
+
+Now let us plot the two and see that longer Sepal.Lengths tend to go along with larger petal widths.  We can see that the dominant axis should be some vector running from the bottom left to the top right.
+
+```{r}
+plot(Z)
+```
+
+Now let us center our values in Z and view that plot.  It has the same shape now cetered around 0.  We do NOT need to scale Z.
+```{r}
+Z_centered = scale(Z, center=TRUE, scale=FALSE)
+plot(Z_centered)
+```
+
+We use rnorm to create a random vector v_try.  We then divide that vector by its own length to make it a unit vector.  We get the slope from simple division.
+```{r}
+v_try = rnorm(2)
+v_try = v_try/sqrt(sum(v_try^2))
+slope = v_try[2]/v_try[1]
+```
+
+We try this random vector on our graph to look by eye and see a candidate vector. As it is random it may look to be a good fit or a terrible fit.
+
+```{r}
+plot(Z_centered)
+abline(0, slope)
+segments(0, 0, v_try[1], v_try[2], col='red', lwd=4)
+```
+
+We can try another random vector
+
+```{r}
+set.seed(29)
+v_try = rnorm(2)
+v_try = v_try/sqrt(sum(v_try^2))
+slope = v_try[2]/v_try[1]
+```
+
+And we get another plot, again with a vector that may be very good or a very bad fit for the data
+
+```{r}
+plot(Z_centered)
+abline(0, slope)
+segments(0, 0, v_try[1], v_try[2], col='red', lwd=4)
+```
+
+Then we look at the subspace and project the points onto the random guess for our desired vector v_try.
+
+```{r}
+par(mfrow=c(1,2))
+plot(Z_centered, xlim=c(-2.5,2.5), ylim=c(-2.5,2.5))
+abline(0, slope)
+alpha = Z_centered %*% v_try  # inner product of each row with v_try
+z_hat = alpha %*% v_try  # locations in R^2
+points(z_hat, col='blue', pch=4)
+segments(0, 0, v_try[1], v_try[2], col='red', lwd=4)
+```
+
+Alpha $\alpha$ is a one dimensional set of points that define the projected location on the vector v_try
+
+```{r}
+head(alpha)
+```
+
+$\widehat{z}$ is the projection of $\alpha$ onto the original two dimensional space.  They will all fall on the line v_try
+
+```{r}
+head(z_hat)
+```
+
+We are compressing the data in the original z down to one dimension a.  In doing so we lose some information, the distance between the original points and their projection on the vector.
+
+The spread of the histogram gives and indication of the variance and we can calculate the exact variance using R.  The more widely distributed the points, (and the higher the variance) the closer the fit is to being on the true dominant axis.
+
+```{r}
+hist(alpha, 25, xlim=c(-3,3), main=round(var(alpha), 2))
+```
+
+Now instead of a random vector, lets compute the true dominant axis (random vector fitting is not scalable for data matrices featuring many dimensions).  This will be done by optimizing the spread of the alphas which means to maximize the variance of the projected points z_hat.
+
+To develop an algorithm that determines the dominant axis it will be useful to define the following terms:
+
+$v\in\mathbb{R}^{D}$ : choice variable  
+X = n * D : observation matrix  
+$\alpha_{i}=x{_{i}}^{T}$  : alpha i  
+  
+In plain English - we're looking maximize the variance of the $\alpha_{i}$'s
+
+The following formula defines the approach for computing sample variance: $\frac{1}{n}\sum_{i=1}^{n}(\alpha_{i}-\bar{\alpha})^2$  
+Where $\bar{\alpha}$ is the sample mean of the $\alpha$'s as defined below:  
+  
+Sample mean $\bar{\alpha}$ = $\frac{1}{n}\sum_{i=1}^{n}\alpha_{i}$  
+  
+  
+With regards to the sample variance, the $\frac{1}{n}$ preceding the equation does not substantially impact the prediction of the sample variance - rather, it modifies it by a constant value.  For the purpose of our calculations (comparing variances) it can be discarded.  
+
+In the equation below, we substitute values for $\alpha_{i}$ and $\bar{\alpha}$
+
+$\max_{V \in \mathbb{R}^{D}}
+\sum_{i=1}^{n}\left[x{_{i}}^{T}\,V-\left(\frac{1}{n}\sum_{i=1}^{n}x{_{i}}^{T}\,V\right)\right]^2$
+  
+The solution to the above maximization problem is some $V \in \mathbb{R}^{D}$ and is often referred to as the loading vector, loading, or rotation.
+
+
+### For Linear Algebra Geeks
+* The way this optimization is actually solved is by using something called the singular value decomposition of X and Lagrange multipliers 
+
+* The solution is closely related to Eigenvalues and Eigenvectors, specifically, the first principle component of X is the first eigenvector of $\frac{1}{n}X^{T}X$
+
+### Paralells between Principle Component Analysis and Ordinary Least Squares
+* PCA can be thought of as “a Regression on a hidden variable”, that is with PCA we don’t know alpha and v beforehand while with a normal regression we know our x's and are trying to estimate our $\beta$'s
+
+* The equations below further demonstrate the connections between PCA and OLS 
+
+    ![](/Users/carterpearson12/Desktop/PM - Scott/Scribing/Regression&PCA.png)
+
+### Latent Semantic Indexing
+* Principle Component Analysis for document term matrices  
+
+* A document term matrix contains a single document in every row and a phrase or word in every column
+
